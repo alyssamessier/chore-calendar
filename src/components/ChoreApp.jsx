@@ -7,7 +7,7 @@ import TodayIcon from '@mui/icons-material/Today'
 import PeopleIcon from '@mui/icons-material/People'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { db } from '../firebase'
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import PersonCard from './PersonCard'
 import HouseholdChores from './HouseholdChores'
 
@@ -81,7 +81,6 @@ export default function ChoreApp() {
   const [newPersonName, setNewPersonName] = useState('')
   const [newPersonColor, setNewPersonColor] = useState(COLOR_PRESETS[2])
 
-  // Load from Firestore on mount
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'app', 'state'), (snap) => {
       if (snap.exists()) {
@@ -103,7 +102,6 @@ export default function ChoreApp() {
     return () => unsub()
   }, [])
 
-  // Save to Firestore whenever state changes
   const saveToFirestore = async (updates) => {
     const ref = doc(db, 'app', 'state')
     await setDoc(ref, updates, { merge: true })
@@ -225,6 +223,17 @@ export default function ChoreApp() {
     saveToFirestore({ people: newPeople })
   }
 
+  const handlePhotoUpload = async (personId, file) => {
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64 = e.target.result
+      const newPeople = people.map(p => p.id === personId ? { ...p, photoURL: base64 } : p)
+      setPeople(newPeople)
+      saveToFirestore({ people: newPeople })
+    }
+    reader.readAsDataURL(file)
+  }
+
   const dayData = getDayData()
   const dayAssign = getDayAssignments()
   const unassignedChores = householdChores.filter(c => !dayAssign[c.id])
@@ -273,6 +282,7 @@ export default function ChoreApp() {
               onToggleChore={(choreId) => toggleChore(choreId, person.id)}
               onUnassignChore={(choreId) => unassignChore(choreId, person.id)}
               onNameChange={(name) => updatePersonName(person.id, name)}
+              onPhotoUpload={handlePhotoUpload}
             />
           ))}
         </Box>
@@ -326,8 +336,8 @@ export default function ChoreApp() {
           {people.map(person => (
             <Box key={person.id} sx={{ bgcolor: '#f8f8f8', borderRadius: 3, p: 2 }}>
               <Stack direction="row" alignItems="center" spacing={1.5} mb={1.5}>
-                <Avatar sx={{ bgcolor: person.avatar, width: 36, height: 36, fontSize: '1rem', fontWeight: 800 }}>
-                  {person.name.charAt(0).toUpperCase()}
+                <Avatar src={person.photoURL || undefined} sx={{ bgcolor: person.avatar, width: 36, height: 36, fontSize: '1rem', fontWeight: 800 }}>
+                  {!person.photoURL && person.name.charAt(0).toUpperCase()}
                 </Avatar>
                 <Typography fontWeight={700} flex={1}>{person.name}</Typography>
                 <Tooltip title="Delete person">
