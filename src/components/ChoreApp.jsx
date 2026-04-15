@@ -225,7 +225,7 @@ export default function ChoreApp() {
     <Box sx={{ minHeight: '100vh', bgcolor: '#f0ece8' }}>
       <Box sx={{ px: 4, py: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'white', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', position: 'sticky', top: 0, zIndex: 10 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography variant="h5" color="#3a3a3a" sx={{ fontFamily: '"Dancing Script", cursive', fontSize: '2rem', lineHeight: 1 }}>Chores</Typography>
+          <Typography variant="h5" color="#3a3a3a" sx={{ fontFamily: '"Raleway", sans-serif', fontSize: '1.6rem', fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase' }}>Chores</Typography>
           <Tooltip title="Manage people">
             <IconButton onClick={() => setPeopleOpen(true)} size="small" sx={{ ml: 1, color: 'text.secondary' }}>
               <PeopleIcon />
