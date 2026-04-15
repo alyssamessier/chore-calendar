@@ -181,12 +181,34 @@ export default function ChoreApp() {
     const day = getDayData()
     const wasCompleted = day.chores.has(choreId)
     const chore = householdChores.find(c => c.id === choreId)
+
+    const day2 = assignments[dateKey] || {}
+    const newDay = { ...day2 }
+    delete newDay[choreId]
+    const newAssignments = { ...assignments, [dateKey]: newDay }
+    setAssignments(newAssignments)
+
+    const compDay = completions[dateKey] || { chores: new Set() }
+    const chores = new Set(compDay.chores)
+    chores.delete(choreId)
+    const newCompletions = { ...completions, [dateKey]: { chores } }
+    setCompletions(newCompletions)
+    const serializableCompletions = {}
+    for (const dk in newCompletions) {
+      serializableCompletions[dk] = [...(newCompletions[dk].chores || [])]
+    }
+
     let newRawPoints = rawPoints
     if (wasCompleted && chore) {
       newRawPoints = { ...rawPoints, [personId]: Math.max(0, (rawPoints[personId] || 0) - chore.points) }
       setRawPoints(newRawPoints)
     }
-    await assignChore(choreId, null)
+
+    await saveAll({
+      assignments: newAssignments,
+      completions: serializableCompletions,
+      rawPoints: newRawPoints
+    })
   }
 
   const handleAddChore = async () => {
