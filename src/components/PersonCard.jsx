@@ -37,9 +37,9 @@ export default function PersonCard({ person, assignedChores = [], completedChore
             <Avatar src={person.photoURL || undefined} sx={{ bgcolor: person.avatar, width: 52, height: 52, fontSize: '1.4rem', fontWeight: 800 }}>
               {!person.photoURL && person.name.charAt(0).toUpperCase()}
             </Avatar>
-            <Box sx={{ position: 'absolute', bottom: -2, right: -2, bgcolor: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>
-              <AddAPhotoIcon sx={{ fontSize: '0.7rem', color: person.accent }} />
-            </Box>
+            <Box sx={{ position: 'absolute', bottom: -4, right: -4, bgcolor: person.accent, borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }}>
+  		<AddAPhotoIcon sx={{ fontSize: '0.85rem', color: 'white' }} />
+	    </Box>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
           </Box>
 

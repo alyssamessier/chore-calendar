@@ -111,21 +111,26 @@ export default function ChoreApp() {
   const getDayData = () => completions[dateKey] || { chores: new Set() }
   const getDayAssignments = () => assignments[dateKey] || {}
 
-  const assignChore = (choreId, personId) => {
-    const newAssignments = (() => {
-      const day = assignments[dateKey] || {}
-      if (personId === null) {
-        const updated = { ...day }
-        delete updated[choreId]
-        return { ...assignments, [dateKey]: updated }
-      }
-      return { ...assignments, [dateKey]: { ...day, [choreId]: personId } }
-    })()
+  const assignChore = async (choreId, personId) => {
+    const day = assignments[dateKey] || {}
+    let newDay
+    if (personId === null) {
+      newDay = { ...day }
+      delete newDay[choreId]
+    } else {
+      newDay = { ...day, [choreId]: personId }
+    }
+    const newAssignments = { ...assignments, [dateKey]: newDay }
     setAssignments(newAssignments)
-    saveToFirestore({ assignments: newAssignments })
 
-    const day = completions[dateKey] || { chores: new Set() }
-    const chores = new Set(day.chores)
+    const serializableAssignments = {}
+    for (const dk in newAssignments) {
+      serializableAssignments[dk] = { ...newAssignments[dk] }
+    }
+    await saveToFirestore({ assignments: serializableAssignments })
+
+    const compDay = completions[dateKey] || { chores: new Set() }
+    const chores = new Set(compDay.chores)
     chores.delete(choreId)
     const newCompletions = { ...completions, [dateKey]: { chores } }
     setCompletions(newCompletions)
@@ -133,7 +138,7 @@ export default function ChoreApp() {
     for (const dk in newCompletions) {
       serializable[dk] = [...(newCompletions[dk].chores || [])]
     }
-    saveToFirestore({ completions: serializable })
+    await saveToFirestore({ completions: serializable })
   }
 
   const toggleChore = (choreId, personId) => {
@@ -159,16 +164,16 @@ export default function ChoreApp() {
     saveToFirestore({ rawPoints: newRawPoints })
   }
 
-  const unassignChore = (choreId, personId) => {
+  const unassignChore = async (choreId, personId) => {
     const day = getDayData()
     const wasCompleted = day.chores.has(choreId)
     const chore = householdChores.find(c => c.id === choreId)
     if (wasCompleted && chore) {
       const newRawPoints = { ...rawPoints, [personId]: Math.max(0, (rawPoints[personId] || 0) - chore.points) }
       setRawPoints(newRawPoints)
-      saveToFirestore({ rawPoints: newRawPoints })
+      await saveToFirestore({ rawPoints: newRawPoints })
     }
-    assignChore(choreId, null)
+    await assignChore(choreId, null)
   }
 
   const handleAddChore = () => {
