@@ -1,18 +1,29 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Box, Typography, Avatar, LinearProgress, Chip, Stack, Checkbox, IconButton, TextField, Tooltip } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import CheckIcon from '@mui/icons-material/Check'
 import StarIcon from '@mui/icons-material/Star'
 import CloseIcon from '@mui/icons-material/Close'
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'
+import AddAPhotoIcon from '@mui/icons-material/AddAPhoto'
 
-export default function PersonCard({ person, assignedChores = [], completedChores = new Set(), rawPoints = 0, completedCount = 0, totalCount = 0, onToggleChore, onUnassignChore, onNameChange }) {
+export default function PersonCard({ person, assignedChores = [], completedChores = new Set(), rawPoints = 0, completedCount = 0, totalCount = 0, onToggleChore, onUnassignChore, onNameChange, onPhotoUpload }) {
   const [editing, setEditing] = useState(false)
   const [nameVal, setNameVal] = useState(person.name)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef()
 
   const handleNameSave = () => {
     onNameChange(nameVal)
     setEditing(false)
+  }
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    await onPhotoUpload(person.id, file)
+    setUploading(false)
   }
 
   const trophies = Math.floor(rawPoints / 100)
@@ -22,9 +33,16 @@ export default function PersonCard({ person, assignedChores = [], completedChore
     <Box sx={{ flex: '1 1 300px', minWidth: 280, maxWidth: 400, bgcolor: 'white', borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.07)', overflow: 'hidden', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-2px)' } }}>
       <Box sx={{ bgcolor: person.color, px: 3, pt: 3, pb: 2 }}>
         <Stack direction="row" alignItems="center" spacing={2} mb={1.5}>
-          <Avatar sx={{ bgcolor: person.avatar, width: 52, height: 52, fontSize: '1.4rem', fontWeight: 800 }}>
-            {person.name.charAt(0).toUpperCase()}
-          </Avatar>
+          <Box sx={{ position: 'relative', cursor: 'pointer' }} onClick={() => fileRef.current.click()}>
+            <Avatar src={person.photoURL || undefined} sx={{ bgcolor: person.avatar, width: 52, height: 52, fontSize: '1.4rem', fontWeight: 800 }}>
+              {!person.photoURL && person.name.charAt(0).toUpperCase()}
+            </Avatar>
+            <Box sx={{ position: 'absolute', bottom: -2, right: -2, bgcolor: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>
+              <AddAPhotoIcon sx={{ fontSize: '0.7rem', color: person.accent }} />
+            </Box>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+          </Box>
+
           <Box flex={1}>
             {editing ? (
               <Stack direction="row" alignItems="center" spacing={1}>
@@ -39,6 +57,7 @@ export default function PersonCard({ person, assignedChores = [], completedChore
                 </Tooltip>
               </Stack>
             )}
+            {uploading && <Typography variant="caption" color="text.secondary">Uploading...</Typography>}
           </Box>
         </Stack>
 
@@ -52,8 +71,8 @@ export default function PersonCard({ person, assignedChores = [], completedChore
 
         <Box>
           <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={0.5}>
-  		Progress: {progressTo100} / 100
-	</Typography>
+            Progress: {progressTo100} / 100
+          </Typography>
           <LinearProgress variant="determinate" value={progressTo100} sx={{ height: 8, borderRadius: 4, bgcolor: 'rgba(255,255,255,0.4)', '& .MuiLinearProgress-bar': { bgcolor: person.accent, borderRadius: 4 } }} />
         </Box>
       </Box>
