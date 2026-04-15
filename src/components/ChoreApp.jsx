@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Box, Typography, IconButton, Tooltip, Fab, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Chip, Stack, Avatar, Divider } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
@@ -6,42 +6,10 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import TodayIcon from '@mui/icons-material/Today'
 import PeopleIcon from '@mui/icons-material/People'
 import DeleteIcon from '@mui/icons-material/Delete'
+import { db } from '../firebase'
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore'
 import PersonCard from './PersonCard'
 import HouseholdChores from './HouseholdChores'
-
-function useLocalState(key, defaultValue) {
-  const [state, setState] = useState(() => {
-    try {
-      const saved = localStorage.getItem(key)
-      if (!saved) return defaultValue
-      const parsed = JSON.parse(saved)
-      if (key === 'completions') {
-        const restored = {}
-        for (const dk in parsed) {
-          restored[dk] = { chores: new Set(parsed[dk].chores || []) }
-        }
-        return restored
-      }
-      return parsed
-    } catch { return defaultValue }
-  })
-  const setAndSave = (val) => {
-    setState(prev => {
-      const next = typeof val === 'function' ? val(prev) : val
-      if (key === 'completions') {
-        const serializable = {}
-        for (const dk in next) {
-          serializable[dk] = { chores: [...(next[dk].chores || [])] }
-        }
-        localStorage.setItem(key, JSON.stringify(serializable))
-      } else {
-        localStorage.setItem(key, JSON.stringify(next))
-      }
-      return next
-    })
-  }
-  return [state, setAndSave]
-}
 
 const COLOR_PRESETS = [
   { bg: '#f3d5b5', accent: '#e07a5f' },
@@ -101,37 +69,73 @@ function formatDate(date) {
 
 export default function ChoreApp() {
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [people, setPeople] = useLocalState('people', DEFAULT_PEOPLE)
-  const [householdChores, setHouseholdChores] = useLocalState('householdChores', DEFAULT_HOUSEHOLD_CHORES)
-  const [rawPoints, setRawPoints] = useLocalState('rawPoints', {})
-  const [completions, setCompletions] = useLocalState('completions', {})
-  const [assignments, setAssignments] = useLocalState('assignments', {})
+  const [people, setPeople] = useState(DEFAULT_PEOPLE)
+  const [householdChores, setHouseholdChores] = useState(DEFAULT_HOUSEHOLD_CHORES)
+  const [rawPoints, setRawPoints] = useState({})
+  const [completions, setCompletions] = useState({})
+  const [assignments, setAssignments] = useState({})
+  const [loaded, setLoaded] = useState(false)
   const [addChoreOpen, setAddChoreOpen] = useState(false)
   const [newChore, setNewChore] = useState({ label: '', emoji: '🧹', points: 10 })
   const [peopleOpen, setPeopleOpen] = useState(false)
   const [newPersonName, setNewPersonName] = useState('')
   const [newPersonColor, setNewPersonColor] = useState(COLOR_PRESETS[2])
 
+  // Load from Firestore on mount
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'app', 'state'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data()
+        if (data.people) setPeople(data.people)
+        if (data.householdChores) setHouseholdChores(data.householdChores)
+        if (data.rawPoints) setRawPoints(data.rawPoints)
+        if (data.assignments) setAssignments(data.assignments)
+        if (data.completions) {
+          const restored = {}
+          for (const dk in data.completions) {
+            restored[dk] = { chores: new Set(data.completions[dk] || []) }
+          }
+          setCompletions(restored)
+        }
+      }
+      setLoaded(true)
+    })
+    return () => unsub()
+  }, [])
+
+  // Save to Firestore whenever state changes
+  const saveToFirestore = async (updates) => {
+    const ref = doc(db, 'app', 'state')
+    await setDoc(ref, updates, { merge: true })
+  }
+
   const dateKey = getDateKey(currentDate)
   const getDayData = () => completions[dateKey] || { chores: new Set() }
   const getDayAssignments = () => assignments[dateKey] || {}
 
   const assignChore = (choreId, personId) => {
-    setAssignments(prev => {
-      const day = prev[dateKey] || {}
+    const newAssignments = (() => {
+      const day = assignments[dateKey] || {}
       if (personId === null) {
         const updated = { ...day }
         delete updated[choreId]
-        return { ...prev, [dateKey]: updated }
+        return { ...assignments, [dateKey]: updated }
       }
-      return { ...prev, [dateKey]: { ...day, [choreId]: personId } }
-    })
-    setCompletions(prev => {
-      const day = prev[dateKey] || { chores: new Set() }
-      const chores = new Set(day.chores)
-      chores.delete(choreId)
-      return { ...prev, [dateKey]: { ...day, chores } }
-    })
+      return { ...assignments, [dateKey]: { ...day, [choreId]: personId } }
+    })()
+    setAssignments(newAssignments)
+    saveToFirestore({ assignments: newAssignments })
+
+    const day = completions[dateKey] || { chores: new Set() }
+    const chores = new Set(day.chores)
+    chores.delete(choreId)
+    const newCompletions = { ...completions, [dateKey]: { chores } }
+    setCompletions(newCompletions)
+    const serializable = {}
+    for (const dk in newCompletions) {
+      serializable[dk] = [...(newCompletions[dk].chores || [])]
+    }
+    saveToFirestore({ completions: serializable })
   }
 
   const toggleChore = (choreId, personId) => {
@@ -140,18 +144,21 @@ export default function ChoreApp() {
     const chore = householdChores.find(c => c.id === choreId)
     if (!chore) return
 
-    setCompletions(prev => {
-      const d = prev[dateKey] || { chores: new Set() }
-      const chores = new Set(d.chores)
-      wasCompleted ? chores.delete(choreId) : chores.add(choreId)
-      return { ...prev, [dateKey]: { ...d, chores } }
-    })
+    const chores = new Set(day.chores)
+    wasCompleted ? chores.delete(choreId) : chores.add(choreId)
+    const newCompletions = { ...completions, [dateKey]: { chores } }
+    setCompletions(newCompletions)
+    const serializable = {}
+    for (const dk in newCompletions) {
+      serializable[dk] = [...(newCompletions[dk].chores || [])]
+    }
+    saveToFirestore({ completions: serializable })
 
-    setRawPoints(prev => {
-      const current = prev[personId] || 0
-      const newVal = Math.max(0, current + (wasCompleted ? -chore.points : chore.points))
-      return { ...prev, [personId]: newVal }
-    })
+    const current = rawPoints[personId] || 0
+    const newVal = Math.max(0, current + (wasCompleted ? -chore.points : chore.points))
+    const newRawPoints = { ...rawPoints, [personId]: newVal }
+    setRawPoints(newRawPoints)
+    saveToFirestore({ rawPoints: newRawPoints })
   }
 
   const unassignChore = (choreId, personId) => {
@@ -159,10 +166,9 @@ export default function ChoreApp() {
     const wasCompleted = day.chores.has(choreId)
     const chore = householdChores.find(c => c.id === choreId)
     if (wasCompleted && chore) {
-      setRawPoints(prev => ({
-        ...prev,
-        [personId]: Math.max(0, (prev[personId] || 0) - chore.points)
-      }))
+      const newRawPoints = { ...rawPoints, [personId]: Math.max(0, (rawPoints[personId] || 0) - chore.points) }
+      setRawPoints(newRawPoints)
+      saveToFirestore({ rawPoints: newRawPoints })
     }
     assignChore(choreId, null)
   }
@@ -170,7 +176,9 @@ export default function ChoreApp() {
   const handleAddChore = () => {
     if (!newChore.label.trim()) return
     const id = 'chore_' + Date.now()
-    setHouseholdChores(prev => [...prev, { id, label: newChore.label, emoji: newChore.emoji, points: Number(newChore.points) }])
+    const newChores = [...householdChores, { id, label: newChore.label, emoji: newChore.emoji, points: Number(newChore.points) }]
+    setHouseholdChores(newChores)
+    saveToFirestore({ householdChores: newChores })
     setNewChore({ label: '', emoji: '🧹', points: 10 })
     setAddChoreOpen(false)
   }
@@ -178,48 +186,56 @@ export default function ChoreApp() {
   const handleAddPerson = () => {
     if (!newPersonName.trim()) return
     const id = 'p_' + Date.now()
-    setPeople(prev => [...prev, {
-      id,
-      name: newPersonName.trim(),
-      color: newPersonColor.bg,
-      accent: newPersonColor.accent,
-      avatar: newPersonColor.accent,
-    }])
+    const newPeople = [...people, { id, name: newPersonName.trim(), color: newPersonColor.bg, accent: newPersonColor.accent, avatar: newPersonColor.accent }]
+    setPeople(newPeople)
+    saveToFirestore({ people: newPeople })
     setNewPersonName('')
     setNewPersonColor(COLOR_PRESETS[2])
   }
 
   const handleDeletePerson = (personId) => {
-    setPeople(prev => prev.filter(p => p.id !== personId))
-    setAssignments(prev => {
-      const updated = {}
-      for (const dk in prev) {
-        const day = { ...prev[dk] }
-        for (const choreId in day) {
-          if (day[choreId] === personId) delete day[choreId]
-        }
-        updated[dk] = day
+    const newPeople = people.filter(p => p.id !== personId)
+    setPeople(newPeople)
+    saveToFirestore({ people: newPeople })
+    const newAssignments = {}
+    for (const dk in assignments) {
+      const day = { ...assignments[dk] }
+      for (const choreId in day) {
+        if (day[choreId] === personId) delete day[choreId]
       }
-      return updated
-    })
-    setRawPoints(prev => {
-      const updated = { ...prev }
-      delete updated[personId]
-      return updated
-    })
+      newAssignments[dk] = day
+    }
+    setAssignments(newAssignments)
+    saveToFirestore({ assignments: newAssignments })
+    const newRawPoints = { ...rawPoints }
+    delete newRawPoints[personId]
+    setRawPoints(newRawPoints)
+    saveToFirestore({ rawPoints: newRawPoints })
   }
 
   const handleChangePersonColor = (personId, preset) => {
-    setPeople(prev => prev.map(p => p.id === personId ? { ...p, color: preset.bg, accent: preset.accent, avatar: preset.accent } : p))
+    const newPeople = people.map(p => p.id === personId ? { ...p, color: preset.bg, accent: preset.accent, avatar: preset.accent } : p)
+    setPeople(newPeople)
+    saveToFirestore({ people: newPeople })
   }
 
-  const updatePersonName = (id, name) => setPeople(prev => prev.map(p => p.id === id ? { ...p, name } : p))
+  const updatePersonName = (id, name) => {
+    const newPeople = people.map(p => p.id === id ? { ...p, name } : p)
+    setPeople(newPeople)
+    saveToFirestore({ people: newPeople })
+  }
 
   const dayData = getDayData()
   const dayAssign = getDayAssignments()
   const unassignedChores = householdChores.filter(c => !dayAssign[c.id])
   const getPersonChores = (personId) => householdChores.filter(c => dayAssign[c.id] === personId)
   const getPersonCompleted = (personId) => householdChores.filter(c => dayAssign[c.id] === personId && dayData.chores.has(c.id)).length
+
+  if (!loaded) return (
+    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f0ece8' }}>
+      <Typography fontWeight={700} color="text.secondary">Loading...</Typography>
+    </Box>
+  )
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f0ece8' }}>
@@ -265,7 +281,11 @@ export default function ChoreApp() {
           chores={unassignedChores}
           people={people}
           onAssign={assignChore}
-          onDelete={(choreId) => setHouseholdChores(prev => prev.filter(c => c.id !== choreId))}
+          onDelete={(choreId) => {
+            const newChores = householdChores.filter(c => c.id !== choreId)
+            setHouseholdChores(newChores)
+            saveToFirestore({ householdChores: newChores })
+          }}
         />
       </Box>
 
