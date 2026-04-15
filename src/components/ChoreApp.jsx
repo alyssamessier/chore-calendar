@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Box, Typography, IconButton, Tooltip, Fab, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Chip, Stack, Avatar, Divider } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
@@ -75,6 +75,7 @@ export default function ChoreApp() {
   const [completions, setCompletions] = useState({})
   const [assignments, setAssignments] = useState({})
   const [loaded, setLoaded] = useState(false)
+  const isSaving = useRef(false)
   const [addChoreOpen, setAddChoreOpen] = useState(false)
   const [newChore, setNewChore] = useState({ label: '', emoji: '🧹', points: 10 })
   const [peopleOpen, setPeopleOpen] = useState(false)
@@ -83,6 +84,7 @@ export default function ChoreApp() {
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'app', 'state'), (snap) => {
+      if (isSaving.current) return
       if (snap.exists()) {
         const data = snap.data()
         if (data.people) setPeople(data.people)
@@ -103,8 +105,8 @@ export default function ChoreApp() {
     return () => unsub()
   }, [])
 
-  // Saves entire document — no merge, so deletions are respected
   const saveAll = async (overrides = {}) => {
+    isSaving.current = true
     const ref = doc(db, 'app', 'state')
     const currentCompletions = overrides.completions !== undefined ? overrides.completions : (() => {
       const s = {}
@@ -120,6 +122,7 @@ export default function ChoreApp() {
       assignments: overrides.assignments !== undefined ? overrides.assignments : assignments,
       completions: currentCompletions,
     })
+    setTimeout(() => { isSaving.current = false }, 2000)
   }
 
   const dateKey = getDateKey(currentDate)
