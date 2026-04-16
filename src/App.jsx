@@ -1,22 +1,34 @@
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
-import ChoreApp from './components/ChoreApp'
+import AppShell from './components/AppShell'
 
 const theme = createTheme({
   palette: {
-    background: { default: '#f0ece8' },
-    primary: { main: '#e07a5f' },
+    background: { default: '#f5f3ef' },
+    primary: { main: '#5b5bd6' },
   },
   typography: {
-    fontFamily: '"Nunito", "Quicksand", sans-serif',
+    fontFamily: '"Raleway", sans-serif',
   },
-  shape: { borderRadius: 16 },
+  shape: { borderRadius: 12 },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: { textTransform: 'none', fontWeight: 700, borderRadius: 8 }
+      }
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: { borderRadius: 8 }
+      }
+    }
+  }
 })
 
 export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <ChoreApp />
-    </ThemeProvider>
+      <AppShell />
+  </ThemeProvider>
   )
 }
